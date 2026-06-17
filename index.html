@@ -69,7 +69,7 @@
           <span class="material-icons text-sm mr-1">volume_up</span> Повторити
         </button>
       </div>
-      <div id="output class="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed pt-1"></div>
+      <div id="output" class="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed pt-1"></div>
     </div>
   </div>
 
@@ -89,7 +89,6 @@
     var audioCtx = null;
     var currentSource = null;
 
-    // Сюди вже вставлено твій актуальний робочий URL
     var scriptUrl = "https://script.google.com/macros/s/AKfycbz2d-ZN5mWemyC79ME0CahQdwRyKtIVhhKMUFx2WOU9mXGL1trnBO34Gp2Vcf2nmTl_mg/exec";
     
     function initAudioContext() {
@@ -165,28 +164,23 @@
         .catch((e) => { console.error(e); showLoader(false); displayResult("❌ Помилка зв'язку з Google API"); });
     }
 
-    // Повністю оновлена локальна система озвучування
     function speakText(text) {
       stopAudio();
       if (!text || !('speechSynthesis' in window)) return;
       
-      // Видаляємо сервісні смайлики з вимови
       var cleanText = text.replace(/✅|❌|📂|🏷️|📝|⚠️/g, "").trim();
       var utterance = new SpeechSynthesisUtterance(cleanText);
 
-      // Інтелектуальне визначення мови тексту
       if (/[іїєґІЇЄҐ]/.test(cleanText)) {
         utterance.lang = "uk-UA";
       } else {
         utterance.lang = "ru-RU";
       }
 
-      // Налаштування тональності голосу (Чоловічий / Жіночий)
       var isMale = voiceSelect.value === "male";
       utterance.pitch = isMale ? 0.82 : 1.18; 
       utterance.rate = 1.0; 
 
-      // Пошук кращого системного голосу на пристрої
       var voices = window.speechSynthesis.getVoices();
       var targetVoice = voices.find(v => 
         v.lang.startsWith(utterance.lang.split('-')[0]) && 
