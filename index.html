@@ -89,10 +89,8 @@
     var audioCtx = null;
     var currentSource = null;
 
-    // ========================================================
-    // ЗМІНИ ТУТ: Встав своє посилання Web App URL всередину лапок
-    // ========================================================
-    var scriptUrl = "https://script.google.com/macros/library/d/1wkyys4_th5yf1h70NpHamOOTX4llEsqqMtrHD7KJS4H7xzP8qMO4zWSt/53";
+    // !!! ВСТАВ СЮДИ СВІЙ URL ВЕБ-ЗАСТОСУНКУ З GOOGLE ПАНЕЛІ (ПОВИНЕН ЗАКІНЧУВАТИСЬ НА /exec) !!!
+    var scriptUrl = "https://script.google.com/macros/s/AKfycbwRJHBHTJ-q5kgDc1FR2rOvloqM0-DQYzKi36kfwHJ7XXHA2iM6gxBgjbOkiA7JsLZX5g/exec";
     
     function initAudioContext() {
       if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
@@ -148,7 +146,16 @@
     
     function handleAction(type) {
       initAudioContext(); var text = userInput.value.trim(); if (!text) return; showLoader(true);
-      fetch(scriptUrl, { method: "POST", body: JSON.stringify({ action: type, text: text }) })
+      
+      var formData = new URLSearchParams();
+      formData.append("action", type);
+      formData.append("text", text);
+
+      fetch(scriptUrl, { 
+        method: "POST", 
+        body: formData.toString(),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }
+      })
         .then(r => r.json())
         .then(j => { showLoader(false); displayResult(j.result); if(type==="save") userInput.value=""; })
         .catch((e) => { console.error(e); showLoader(false); displayResult("❌ Помилка зв'язку з Google API"); });
@@ -156,7 +163,17 @@
 
     function speakText(text) {
       stopAudio(); initAudioContext();
-      fetch(scriptUrl, { method: "POST", body: JSON.stringify({ action: "tts", text: text, voice: voiceSelect.value }) })
+      
+      var formData = new URLSearchParams();
+      formData.append("action", "tts");
+      formData.append("text", text);
+      formData.append("voice", voiceSelect.value);
+
+      fetch(scriptUrl, { 
+        method: "POST", 
+        body: formData.toString(),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }
+      })
         .then(r => r.json()).then(j => { processAndPlay(j.audio, text); });
     }
     
