@@ -142,13 +142,23 @@
     
     function stopAudio() { 
       if (currentSource) { try { currentSource.stop(); } catch(e){} currentSource = null; } 
-      if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); }
     }
     
-    function clearInput() { userInput.value = ""; stopAudio(); }
+    function clearInput() { userInput.value = ""; stopAudio(); if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); } }
     
     function handleAction(type) {
-      initAudioContext(); var text = userInput.value.trim(); if (!text) return; showLoader(true);
+      initAudioContext(); 
+      var text = userInput.value.trim(); 
+      if (!text) return; 
+      
+      // 🔥 НАДЕЖНЫЙ МОБИЛЬНЫЙ АНЛОК: Смартфон видит это мгновенное действие пользователя 
+      // и открывает системный аудио-канал. Теперь мы НЕ вызываем здесь .cancel()!
+      if ('speechSynthesis' in window && autoSpeakCheckbox.checked) {
+        var unlockUtterance = new SpeechSynthesisUtterance(' ');
+        window.speechSynthesis.speak(unlockUtterance);
+      }
+
+      showLoader(true);
       
       var formData = new URLSearchParams();
       formData.append("action", type);
@@ -165,8 +175,10 @@
     }
 
     function speakText(text) {
-      stopAudio();
       if (!text || !('speechSynthesis' in window)) return;
+      
+      // Принудительно очищаем очередь старой речи ТОЛЬКО перед стартом нового ответа
+      window.speechSynthesis.cancel();
       
       var cleanText = text.replace(/✅|❌|📂|🏷️|📝|⚠️/g, "").trim();
       var utterance = new SpeechSynthesisUtterance(cleanText);
@@ -181,24 +193,42 @@
       utterance.pitch = isMale ? 0.82 : 1.18; 
       utterance.rate = 1.0; 
 
+      // Безопасный подбор мобильных голосов
       var voices = window.speechSynthesis.getVoices();
-      var targetVoice = voices.find(v => 
-        v.lang.startsWith(utterance.lang.split('-')[0]) && 
-        (isMale ? (v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("maxim") || v.name.toLowerCase().includes("pavel") || v.name.toLowerCase().includes("george")) 
-                : (v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("tatyana") || v.name.toLowerCase().includes("milena") || v.name.toLowerCase().includes("irina")))
-      );
+      if (voices && voices.length > 0) {
+        var targetVoice = voices.find(v => 
+          v.lang.replace('_', '-').startsWith(utterance.lang.split('-')[0]) && 
+          (isMale ? (v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("maxim") || v.name.toLowerCase().includes("pavel") || v.name.toLowerCase().includes("yuri")) 
+                  : (v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("tatyana") || v.name.toLowerCase().includes("milena") || v.name.toLowerCase().includes("lesya")))
+        );
 
-      if (!targetVoice) {
-        targetVoice = voices.find(v => v.lang.startsWith(utterance.lang.split('-')[0]));
+        if (!targetVoice) {
+          targetVoice = voices.find(v => v.lang.replace('_', '-').startsWith(utterance.lang.split('-')[0]));
+        }
+        if (targetVoice) utterance.voice = targetVoice;
       }
-      if (targetVoice) utterance.voice = targetVoice;
 
       window.speechSynthesis.speak(utterance);
     }
     
     function speakOutput() { speakText(output.innerText); }
-    function showLoader(show) { if (show) { loader.classList.remove("hidden"); outputContainer.classList.add("hidden"); stopAudio(); } else { loader.classList.add("hidden"); } }
-    function displayResult(text) { output.innerText = text; outputContainer.classList.remove("hidden"); if (autoSpeakCheckbox.checked) speakText(text); }
+    
+    // Внутри showLoader больше не вызывается деструктивный для iOS синтеза speechSynthesis.cancel()
+    function showLoader(show) { 
+      if (show) { 
+        loader.classList.remove("hidden"); 
+        outputContainer.classList.add("hidden"); 
+        stopAudio(); 
+      } else { 
+        loader.classList.add("hidden"); 
+      } 
+    }
+    
+    function displayResult(text) { 
+      output.innerText = text; 
+      outputContainer.classList.remove("hidden"); 
+      if (autoSpeakCheckbox.checked) speakText(text); 
+    }
     
     if ('speechSynthesis' in window && window.speechSynthesis.onvoiceschanged !== undefined) {
       window.speechSynthesis.onvoiceschanged = window.speechSynthesis.getVoices;
