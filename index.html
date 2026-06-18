@@ -87,7 +87,6 @@
     var recognition = null;
     var isRecording = false;
     var audioCtx = null;
-    var currentSource = null;
 
     var scriptUrl = "https://script.google.com/macros/s/AKfycbz2d-ZN5mWemyC79ME0CahQdwRyKtIVhhKMUFx2WOU9mXGL1trnBO34Gp2Vcf2nmTl_mg/exec";
     
@@ -128,7 +127,8 @@
     }
     
     function toggleSpeech() {
-      initAudioContext(); stopAudio();
+      initAudioContext();
+      if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); }
       if (!setupSpeechRecognition()) return;
       if (isRecording) { recognition.stop(); } else { try { recognition.start(); } catch(e){} }
     }
@@ -140,16 +140,22 @@
       micStatus.innerText = "Натисніть для запису";
     }
     
-    function stopAudio() { 
-      if (currentSource) { try { currentSource.stop(); } catch(e){} currentSource = null; } 
-    }
-    
-    function clearInput() { userInput.value = ""; stopAudio(); if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); } }
+    function clearInput() { userInput.value = ""; if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); } }
     
     function handleAction(type) {
       initAudioContext(); 
       var text = userInput.value.trim(); 
       if (!text) return; 
+
+      // 🔥 СИНХРОННЫЙ ШЛЮЗ ДЛЯ ХРОМА: Говорим «Обробляю» прямо в момент тапа по кнопке.
+      // Это на 100% легитимный жест для Android, открывающий системный звуковой канал.
+      if ('speechSynthesis' in window && autoSpeakCheckbox.checked) {
+        window.speechSynthesis.cancel();
+        var interimUtterance = new SpeechSynthesisUtterance("Обробляю");
+        interimUtterance.lang = "uk-UA";
+        interimUtterance.rate = 1.1;
+        window.speechSynthesis.speak(interimUtterance);
+      }
 
       showLoader(true);
       
@@ -167,49 +173,36 @@
         .catch((e) => { console.error(e); showLoader(false); displayResult("❌ Помилка зв'язку з Google API"); });
     }
 
-    function speakText(text) {
+    function speakText(text, forceClear = false) {
       if (!text || !('speechSynthesis' in window)) return;
       
-      // 🔥 КРИТИЧЕСКИЙ ФИКС ДЛЯ HONOR/ANDROID:
-      // Сначала жестко сбрасываем предыдущие зависшие сессии TTS
-      window.speechSynthesis.cancel();
+      // Сбрасываем очередь только если это принудительный ручной повтор кликом
+      if (forceClear) {
+        window.speechSynthesis.cancel();
+      }
       
-      // 🔥 ТАЙМАУТ-ХАК: Даем оболочке EMUI ровно 150мс на очистку внутренних буферов.
-      // Без этой микро-паузы Андроид намертво игнорирует следующий вызов .speak()
-      setTimeout(function() {
-        var cleanText = text.replace(/✅|❌|📂|🏷️|📝|⚠️/g, "").trim();
-        var utterance = new SpeechSynthesisUtterance(cleanText);
+      var cleanText = text.replace(/✅|❌|📂|🏷️|📝|⚠️/g, "").trim();
+      var utterance = new SpeechSynthesisUtterance(cleanText);
 
-        if (/[іїєґІЇЄҐіїєґ]/.test(cleanText)) {
-          utterance.lang = "uk-UA";
-        } else {
-          utterance.lang = "ru-RU";
-        }
+      if (/[іїєґІЇЄҐіїєґ]/.test(cleanText)) {
+        utterance.lang = "uk-UA";
+      } else {
+        utterance.lang = "ru-RU";
+      }
 
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
 
-        // 🔥 ЖЕСТКАЯ ПРИВЯЗКА РОДНОГО СИСТЕМНОГО ГОЛОСА ДЛЯ СМАРТФОНА
-        var voices = window.speechSynthesis.getVoices();
-        if (voices && voices.length > 0) {
-          var langTarget = utterance.lang.split('-')[0].toLowerCase();
-          var matchedVoice = voices.find(v => v.lang.toLowerCase().startsWith(langTarget));
-          if (matchedVoice) {
-            utterance.voice = matchedVoice;
-          }
-        }
-
-        window.speechSynthesis.speak(utterance);
-      }, 150);
+      // Максимально простая передача текста системе без кастомных ломающихся переборов
+      window.speechSynthesis.speak(utterance);
     }
     
-    function speakOutput() { speakText(output.innerText); }
+    function speakOutput() { speakText(output.innerText, true); }
     
     function showLoader(show) { 
       if (show) { 
         loader.classList.remove("hidden"); 
         outputContainer.classList.add("hidden"); 
-        stopAudio(); 
       } else { 
         loader.classList.add("hidden"); 
       } 
@@ -218,7 +211,7 @@
     function displayResult(text) { 
       output.innerText = text; 
       outputContainer.classList.remove("hidden"); 
-      if (autoSpeakCheckbox.checked) speakText(text); 
+      if (autoSpeakCheckbox.checked) speakText(text, false); 
     }
     
     if ('speechSynthesis' in window && window.speechSynthesis.onvoiceschanged !== undefined) {
