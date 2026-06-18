@@ -150,12 +150,6 @@
       initAudioContext(); 
       var text = userInput.value.trim(); 
       if (!text) return; 
-      
-      // АНДРОИД ХАК: Активируем системный канал коротким звуком «пустышкой» без текста
-      if ('speechSynthesis' in window && autoSpeakCheckbox.checked) {
-        var unlockUtterance = new SpeechSynthesisUtterance('');
-        window.speechSynthesis.speak(unlockUtterance);
-      }
 
       showLoader(true);
       
@@ -173,54 +167,43 @@
         .catch((e) => { console.error(e); showLoader(false); displayResult("❌ Помилка зв'язку з Google API"); });
     }
 
-    function speakText(text, isDirectClick = false) {
+    function speakText(text) {
       if (!text || !('speechSynthesis' in window)) return;
       
-      // На Андроиде cancel() сбрасывает фокус, вызываем ТОЛЬКО при ручном клике на "Повторити"
-      if (isDirectClick) {
-        window.speechSynthesis.cancel();
-      }
+      // 🔥 КРИТИЧЕСКИЙ ФИКС ДЛЯ HONOR/ANDROID:
+      // Сначала жестко сбрасываем предыдущие зависшие сессии TTS
+      window.speechSynthesis.cancel();
       
-      var cleanText = text.replace(/✅|❌|📂|🏷️|📝|⚠️/g, "").trim();
-      var utterance = new SpeechSynthesisUtterance(cleanText);
+      // 🔥 ТАЙМАУТ-ХАК: Даем оболочке EMUI ровно 150мс на очистку внутренних буферов.
+      // Без этой микро-паузы Андроид намертво игнорирует следующий вызов .speak()
+      setTimeout(function() {
+        var cleanText = text.replace(/✅|❌|📂|🏷️|📝|⚠️/g, "").trim();
+        var utterance = new SpeechSynthesisUtterance(cleanText);
 
-      // Авто-определение языка
-      if (/[іїєґІЇЄҐ]/.test(cleanText)) {
-        utterance.lang = "uk-UA";
-      } else {
-        utterance.lang = "ru-RU";
-      }
+        if (/[іїєґІЇЄҐіїєґ]/.test(cleanText)) {
+          utterance.lang = "uk-UA";
+        } else {
+          utterance.lang = "ru-RU";
+        }
 
-      // Проверка на мобильное устройство
-      var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      
-      if (isMobile) {
-        // На Андроид/Honor отдаем управление системному движку (он сам выберет лучший голос)
         utterance.rate = 1.0;
-      } else {
-        // Десктопные кастомные настройки
-        var isMale = voiceSelect.value === "male";
-        utterance.pitch = isMale ? 0.82 : 1.18; 
-        utterance.rate = 1.0; 
+        utterance.pitch = 1.0;
 
+        // 🔥 ЖЕСТКАЯ ПРИВЯЗКА РОДНОГО СИСТЕМНОГО ГОЛОСА ДЛЯ СМАРТФОНА
         var voices = window.speechSynthesis.getVoices();
         if (voices && voices.length > 0) {
-          var targetVoice = voices.find(v => 
-            v.lang.replace('_', '-').startsWith(utterance.lang.split('-')[0]) && 
-            (isMale ? (v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("maxim")) 
-                    : (v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("tatyana")))
-          );
-          if (!targetVoice) {
-            targetVoice = voices.find(v => v.lang.replace('_', '-').startsWith(utterance.lang.split('-')[0]));
+          var langTarget = utterance.lang.split('-')[0].toLowerCase();
+          var matchedVoice = voices.find(v => v.lang.toLowerCase().startsWith(langTarget));
+          if (matchedVoice) {
+            utterance.voice = matchedVoice;
           }
-          if (targetVoice) utterance.voice = targetVoice;
         }
-      }
 
-      window.speechSynthesis.speak(utterance);
+        window.speechSynthesis.speak(utterance);
+      }, 150);
     }
     
-    function speakOutput() { speakText(output.innerText, true); }
+    function speakOutput() { speakText(output.innerText); }
     
     function showLoader(show) { 
       if (show) { 
@@ -235,7 +218,7 @@
     function displayResult(text) { 
       output.innerText = text; 
       outputContainer.classList.remove("hidden"); 
-      if (autoSpeakCheckbox.checked) speakText(text, false); 
+      if (autoSpeakCheckbox.checked) speakText(text); 
     }
     
     if ('speechSynthesis' in window && window.speechSynthesis.onvoiceschanged !== undefined) {
