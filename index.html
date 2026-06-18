@@ -151,10 +151,9 @@
       var text = userInput.value.trim(); 
       if (!text) return; 
       
-      // 🔥 НАДЕЖНЫЙ МОБИЛЬНЫЙ АНЛОК: Смартфон видит это мгновенное действие пользователя 
-      // и открывает системный аудио-канал. Теперь мы НЕ вызываем здесь .cancel()!
+      // АНДРОИД ХАК: Активируем системный канал коротким звуком «пустышкой» без текста
       if ('speechSynthesis' in window && autoSpeakCheckbox.checked) {
-        var unlockUtterance = new SpeechSynthesisUtterance(' ');
+        var unlockUtterance = new SpeechSynthesisUtterance('');
         window.speechSynthesis.speak(unlockUtterance);
       }
 
@@ -174,46 +173,55 @@
         .catch((e) => { console.error(e); showLoader(false); displayResult("❌ Помилка зв'язку з Google API"); });
     }
 
-    function speakText(text) {
+    function speakText(text, isDirectClick = false) {
       if (!text || !('speechSynthesis' in window)) return;
       
-      // Принудительно очищаем очередь старой речи ТОЛЬКО перед стартом нового ответа
-      window.speechSynthesis.cancel();
+      // На Андроиде cancel() сбрасывает фокус, вызываем ТОЛЬКО при ручном клике на "Повторити"
+      if (isDirectClick) {
+        window.speechSynthesis.cancel();
+      }
       
       var cleanText = text.replace(/✅|❌|📂|🏷️|📝|⚠️/g, "").trim();
       var utterance = new SpeechSynthesisUtterance(cleanText);
 
+      // Авто-определение языка
       if (/[іїєґІЇЄҐ]/.test(cleanText)) {
         utterance.lang = "uk-UA";
       } else {
         utterance.lang = "ru-RU";
       }
 
-      var isMale = voiceSelect.value === "male";
-      utterance.pitch = isMale ? 0.82 : 1.18; 
-      utterance.rate = 1.0; 
+      // Проверка на мобильное устройство
+      var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // На Андроид/Honor отдаем управление системному движку (он сам выберет лучший голос)
+        utterance.rate = 1.0;
+      } else {
+        // Десктопные кастомные настройки
+        var isMale = voiceSelect.value === "male";
+        utterance.pitch = isMale ? 0.82 : 1.18; 
+        utterance.rate = 1.0; 
 
-      // Безопасный подбор мобильных голосов
-      var voices = window.speechSynthesis.getVoices();
-      if (voices && voices.length > 0) {
-        var targetVoice = voices.find(v => 
-          v.lang.replace('_', '-').startsWith(utterance.lang.split('-')[0]) && 
-          (isMale ? (v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("maxim") || v.name.toLowerCase().includes("pavel") || v.name.toLowerCase().includes("yuri")) 
-                  : (v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("tatyana") || v.name.toLowerCase().includes("milena") || v.name.toLowerCase().includes("lesya")))
-        );
-
-        if (!targetVoice) {
-          targetVoice = voices.find(v => v.lang.replace('_', '-').startsWith(utterance.lang.split('-')[0]));
+        var voices = window.speechSynthesis.getVoices();
+        if (voices && voices.length > 0) {
+          var targetVoice = voices.find(v => 
+            v.lang.replace('_', '-').startsWith(utterance.lang.split('-')[0]) && 
+            (isMale ? (v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("maxim")) 
+                    : (v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("tatyana")))
+          );
+          if (!targetVoice) {
+            targetVoice = voices.find(v => v.lang.replace('_', '-').startsWith(utterance.lang.split('-')[0]));
+          }
+          if (targetVoice) utterance.voice = targetVoice;
         }
-        if (targetVoice) utterance.voice = targetVoice;
       }
 
       window.speechSynthesis.speak(utterance);
     }
     
-    function speakOutput() { speakText(output.innerText); }
+    function speakOutput() { speakText(output.innerText, true); }
     
-    // Внутри showLoader больше не вызывается деструктивный для iOS синтеза speechSynthesis.cancel()
     function showLoader(show) { 
       if (show) { 
         loader.classList.remove("hidden"); 
@@ -227,7 +235,7 @@
     function displayResult(text) { 
       output.innerText = text; 
       outputContainer.classList.remove("hidden"); 
-      if (autoSpeakCheckbox.checked) speakText(text); 
+      if (autoSpeakCheckbox.checked) speakText(text, false); 
     }
     
     if ('speechSynthesis' in window && window.speechSynthesis.onvoiceschanged !== undefined) {
